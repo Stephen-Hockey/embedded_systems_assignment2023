@@ -3,88 +3,94 @@
 #include "pio.h"
 #include "timer.h"
 #include "pacer.h"
-#include "task.h"
+#include "button.h"
+#include "navswitch.h"
 #include "led.h"
 #include "ledmat.h"
 #include "display.h"
-#include "button.h"
-#include "navswitch.h"
-#include "ir.h"
+#include "tinygl.h"
+#include "font.h"
 
-//test because git is not working for me
+#define PACER_RATE 200
+#define NAVSWITCH_CHECK_RATE 50
 
-static uint8_t previous_column;
 
-/** Define PIO pins driving LED matrix rows.  */
-static const pio_t rows[] =
+typedef enum
 {
-    LEDMAT_ROW1_PIO, LEDMAT_ROW2_PIO, LEDMAT_ROW3_PIO, 
-    LEDMAT_ROW4_PIO, LEDMAT_ROW5_PIO, LEDMAT_ROW6_PIO,
-    LEDMAT_ROW7_PIO
-};
+    GAME_LAUNCHED,          /* When a game is first started, roles need to be chosen */
+    PITCHER_CHOOSE,         /* Pitcher is choosing what lane to throw the ball down */
+    PITCHER_TIMING,         /* Pitcher is timing the power of his shot */
+    PITCHER_BALL_THROWN,    /* Pitcher has thrown the ball and is waiting for batter's response */
+    BATTER_IDLE,            /* Batter is waiting for the ball to be thrown */
+    BATTER_BALL_THROWN      /* Ball comes towards batter for them to swing at */
+} game_state_t;
 
+static game_state_t game_state = GAME_LAUNCHED;
 
-/** Define PIO pins driving LED matrix columns.  */
-static const pio_t cols[] =
+/**
+ * Checks whether there was a navswitch push event at NAVSWITCH_CHECK_RATE Hz
+ * and calls the appropriate function
+*/
+void check_navswitch() {
+    navswitch_update ();
+    if (navswitch_push_event_p (NAVSWITCH_NORTH))
+        navswitch_north_pushed();
+    if (navswitch_push_event_p (NAVSWITCH_SOUTH))
+        navswitch_south_pushed();
+    if (navswitch_push_event_p (NAVSWITCH_EAST))
+        navswitch_east_pushed();
+    if (navswitch_push_event_p (NAVSWITCH_WEST))
+        navswitch_west_pushed();
+    if (navswitch_push_event_p (NAVSWITCH_PUSH))
+        navswitch_pushed();
+}
+
+void navswitch_north_pushed()
 {
-    LEDMAT_COL1_PIO, LEDMAT_COL2_PIO, LEDMAT_COL3_PIO,
-    LEDMAT_COL4_PIO, LEDMAT_COL5_PIO
-};
+    
+}
 
-
-static const uint8_t bitmap[] =
+void navswitch_south_pushed()
 {
-    0b0011100,
-    0b0110000,
-    0b0111100,
-    0b0011100,
-    0b0010100
-};
+    
+}
 
-static void display_column (uint8_t row_pattern, uint8_t current_column)
+void navswitch_east_pushed()
 {
+    
+}
 
-    /* TODO */
-    pio_output_high(cols[previous_column]);
-    for (uint8_t i = 0; i < LEDMAT_ROWS_NUM; i++) {
-        if ((row_pattern >> i) & 1) {
-            pio_output_low(rows[i]);
-        } else {
-            pio_output_high(rows[i]);
-        }
-    }
-    pio_output_low(cols[current_column]);
-    previous_column = current_column;
+void navswitch_west_pushed()
+{
 
 }
 
+void navswitch_pushed()
+{
+    
+}
 
 int main (void)
-{
-    uint8_t current_column = 0;
-  
+{   
+    // Initialisation
     system_init ();
-    pacer_init (500);
-    
-    /* TODO: Initialise LED matrix pins.  */
-    for (uint8_t i = 0; i < LEDMAT_COLS_NUM; i++) {
-        pio_config_set(cols[i], PIO_OUTPUT_HIGH);
-    }
-    for (uint8_t i = 0; i < LEDMAT_ROWS_NUM; i++) {
-        pio_config_set(rows[i], PIO_OUTPUT_HIGH);
-    }
+    pacer_init(PACER_RATE);
+    tinygl_init(PACER_RATE);
 
-    while (1)
-    {
+    // Declare tick counters
+    uint8_t navswitch_check_ticks;
+
+    // Main game loop
+    while (1) {
         pacer_wait();
-        
-        display_column(bitmap[current_column], current_column);
-    
-        current_column++;
-    
-        if (current_column > (LEDMAT_COLS_NUM - 1))
-        {
-            current_column = 0;
-        }           
+        tinygl_clear();
+
+        navswitch_check_ticks++;
+        if (navswitch_check_ticks >= PACER_RATE/NAVSWITCH_CHECK_RATE) {
+            check_navswitch();
+            navswitch_check_ticks = 0;
+        }
+
+        tinygl_update ();
     }
 }

@@ -31,7 +31,10 @@ timer.o: ../../drivers/avr/timer.c ../../drivers/avr/system.h ../../drivers/avr/
 pacer.o: ../../utils/pacer.c ../../drivers/avr/system.h ../../drivers/avr/timer.h ../../utils/pacer.h
 	$(CC) -c $(CFLAGS) $< -o $@
 
-task.o: ../../utils/task.c ../../drivers/avr/system.h ../../drivers/avr/timer.h ../../utils/task.h
+button.o: ../../drivers/button.c ../../drivers/avr/pio.h ../../drivers/avr/system.h ../../drivers/button.h
+	$(CC) -c $(CFLAGS) $< -o $@
+
+navswitch.o: ../../drivers/navswitch.c ../../drivers/avr/delay.h ../../drivers/avr/pio.h ../../drivers/avr/system.h ../../drivers/navswitch.h
 	$(CC) -c $(CFLAGS) $< -o $@
 
 led.o: ../../drivers/led.c ../../drivers/avr/pio.h ../../drivers/avr/system.h ../../drivers/led.h
@@ -41,6 +44,12 @@ ledmat.o: ../../drivers/ledmat.c ../../drivers/avr/pio.h ../../drivers/avr/syste
 	$(CC) -c $(CFLAGS) $< -o $@
 
 display.o: ../../drivers/display.c ../../drivers/avr/system.h ../../drivers/display.h ../../drivers/ledmat.h
+	$(CC) -c $(CFLAGS) $< -o $@
+
+tinygl.o: ../../utils/tinygl.c ../../drivers/avr/system.h ../../drivers/display.h ../../utils/font.h ../../utils/tinygl.h
+	$(CC) -c $(CFLAGS) $< -o $@
+
+font.o: ../../utils/font.c ../../drivers/avr/system.h ../../utils/font.h
 	$(CC) -c $(CFLAGS) $< -o $@
 
 button.o: ../../drivers/button.c ../../drivers/avr/pio.h ../../drivers/avr/system.h ../../drivers/button.h
@@ -54,9 +63,13 @@ ir.o: ../../drivers/ir.c ../../drivers/avr/delay.h ../../drivers/avr/pio.h ../..
 
 
 # Link: create ELF output file from object files.
-game.out: game.o system.o pio.o timer.o pacer.o task.o led.o ledmat.o display.o button.o navswitch.o ir.o
+game.out: game.o system.o pio.o timer.o pacer.o button.o navswitch.o led.o ledmat.o display.o tinygl.o font.o button.o navswitch.o ir.o
 	$(CC) $(CFLAGS) $^ -o $@ -lm
 	$(SIZE) $@
+
+# Create hex file for programming from executable file.
+game.hex: game.out
+	$(OBJCOPY) -O ihex game.out game.hex
 
 
 # Target: clean project.
