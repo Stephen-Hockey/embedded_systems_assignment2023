@@ -2,6 +2,8 @@
 #include "pio.h"
 #include "pacer.h"
 
+//test because git is not working for me
+
 static uint8_t previous_column;
 
 /** Define PIO pins driving LED matrix rows.  */
