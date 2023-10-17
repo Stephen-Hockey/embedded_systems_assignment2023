@@ -1,7 +1,17 @@
+#include <stdio.h>
 #include "system.h"
 #include "pio.h"
+#include "timer.h"
 #include "pacer.h"
+#include "task.h"
+#include "led.h"
+#include "ledmat.h"
+#include "display.h"
+#include "button.h"
+#include "navswitch.h"
 
+
+#include "ir.h"
 //test because git is not working for me
 
 static uint8_t previous_column;
