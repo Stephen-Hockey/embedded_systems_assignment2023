@@ -9,9 +9,8 @@
 #include "display.h"
 #include "button.h"
 #include "navswitch.h"
-
-
 #include "ir.h"
+
 //test because git is not working for me
 
 static uint8_t previous_column;
