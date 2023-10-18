@@ -13,7 +13,7 @@ const tinygl_point_t BASES[] = {
  * @param point1 a point
  * @param point2 another point
 */
-bool point_equals(tinygl_point_t point1, tinygl_point_t point2) 
+bool point_equals_p(tinygl_point_t point1, tinygl_point_t point2) 
 {
     return point1.x == point2.x && point1.y == point2.y;
 }

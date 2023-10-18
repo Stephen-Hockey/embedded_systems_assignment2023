@@ -10,7 +10,7 @@ typedef enum {
     BATTER_IDLE,            /* Batter is waiting for the ball to be thrown */
     BATTER_BALL_THROWN,     /* Ball comes towards batter for them to swing at */
     BATTER_RUNNING,         /* Ball has been hit and batter can run around the bases */
-    GAME_END                /* Both players have had a chance at both roles and the game is over */
+    GAME_OVER                /* Both players have had a chance at both roles and the game is over */
 } game_state_t;
 
 #endif

@@ -6,14 +6,31 @@ void pitcher_init(tinygl_point_t *pitcher)
     pitcher->y = LEDMAT_ROWS_NUM / 2;
 }
 
+void pitcher_move_right(tinygl_point_t *pitcher)
+{
+    if (pitcher->x < LEDMAT_COLS_NUM - 1) pitcher->x++;
+}
+
 void pitcher_move_left(tinygl_point_t *pitcher)
 {
     if (pitcher->x > 0) pitcher->x--;
 }
 
-void pitcher_move_right(tinygl_point_t *pitcher)
+void pitcher_power_bar_init(power_bar_t *power_bar)
 {
-    if (pitcher->x < LEDMAT_COLS_NUM - 1) pitcher->x++;
+    power_bar->power = 0;
+    power_bar->increment_value = 1;
+}
+
+void pitcher_power_bar_update(power_bar_t *power_bar)
+{
+    if (power_bar->power == LEDMAT_ROWS_NUM - 1)
+        power_bar->increment_value = -1;
+
+    if (power_bar->power == 0)
+        power_bar->increment_value = 1;
+
+    power_bar->power += power_bar->increment_value;
 }
 
 void fielder_init(tinygl_point_t *fielder, tinygl_point_t *hit_ball) 

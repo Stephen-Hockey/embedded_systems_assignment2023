@@ -1,4 +1,3 @@
-#include <stdlib.h>
 #include "system.h"
 #include "pio.h"
 #include "timer.h"
@@ -8,17 +7,17 @@
 #include "ledmat.h"
 #include "display.h"
 #include "tinygl.h"
-#include "font.h"
+#include "../fonts/font3x5_1.h"
 #include "ir_uart.h"
 #include "baseball_objects.h"
 #include "game_states.h"
 #include "pitcher.h"
 #include "batter.h"
+#include "ir_handler.h"
+#include "emotions.h"
 
 #define PACER_RATE 200
-#define NAVSWITCH_CHECK_RATE 100
-#define COLLISION_CHECK_RATE 100
-#define IR_CHECK_RATE 100
+#define ACTION_RATE 100
 #define DRAW_HARD_RATE 200
 #define DRAW_LIGHT_RATE 50
 #define POWER_BAR_UPDATE_RATE 20
@@ -30,16 +29,17 @@ batter_t batter;
 tinygl_point_t fielder;
 tinygl_point_t hit_ball;
 ball_t pitched_ball;
-runner_t runner = {.base_num = 0};
+runner_t runner;
 power_bar_t power_bar;
 
-uint16_t bases_covered;
+uint8_t bases_covered;
 uint8_t strikes;
+bool winner;
 
 uint8_t chosen_pitch_col;
 uint8_t chosen_pitch_power;
 
-void navswitch_north_pushed()
+void navswitch_north_pushed(void)
 {
     switch (game_state) {
         case PITCHER_FIELDING:
@@ -49,16 +49,18 @@ void navswitch_north_pushed()
             if (ball_hit_p(pitched_ball, batter)) {
                 runner_init(&runner);
                 game_state = BATTER_RUNNING;
-                ir_uart_putc('O');
+                ir_uart_putc(BALL_HIT);
             }
             break;        
         case BATTER_RUNNING:
             runner_move_up(&runner);
             break;
+        default:
+            break;
     }
 }
 
-void navswitch_south_pushed()
+void navswitch_south_pushed(void)
 {
     switch (game_state) {
         case PITCHER_FIELDING:
@@ -67,10 +69,12 @@ void navswitch_south_pushed()
         case BATTER_RUNNING:
             runner_move_down(&runner);
             break;
+        default:
+            break;
     }
 }
 
-void navswitch_east_pushed()
+void navswitch_east_pushed(void)
 {
     switch (game_state) {
         case PITCHER_CHOOSE:
@@ -88,10 +92,12 @@ void navswitch_east_pushed()
         case BATTER_RUNNING:
             runner_move_right(&runner);
             break;
+        default:
+            break;
     }
 }
 
-void navswitch_west_pushed()
+void navswitch_west_pushed(void)
 {   
     switch (game_state) {
         case PITCHER_CHOOSE:
@@ -109,21 +115,22 @@ void navswitch_west_pushed()
         case BATTER_RUNNING:
             runner_move_left(&runner);
             break;
+        default:
+            break;
     }
 }
 
-void navswitch_push_pushed()
+void navswitch_push_pushed(void)
 {
     uint8_t ball_packet; 
     switch (game_state) {
         case GAME_LAUNCHED:
-            ir_uart_putc('A'); // the character is irrelevant but can use for checking
+            ir_uart_putc(START_GAME); 
             game_state = BATTER_IDLE;        
             break;
         case PITCHER_CHOOSE:
             chosen_pitch_col = pitcher.x;
-            power_bar.power = 0;
-            power_bar.increment_value = 1;
+            pitcher_power_bar_init(&power_bar);
             game_state = PITCHER_TIMING;
             break;    
         case PITCHER_TIMING:        
@@ -132,6 +139,8 @@ void navswitch_push_pushed()
             ir_uart_putc(ball_packet);
             game_state = PITCHER_BALL_THROWN;
             break;
+        default:
+            break;
     }
 }
 
@@ -139,7 +148,8 @@ void navswitch_push_pushed()
  * Checks whether there was a navswitch push event at NAVSWITCH_CHECK_RATE Hz
  * and calls the appropriate function
 */
-void check_navswitch() {
+void check_navswitch(void) 
+{
     navswitch_update ();
     if (navswitch_push_event_p (NAVSWITCH_NORTH))
         navswitch_north_pushed();
@@ -153,66 +163,77 @@ void check_navswitch() {
         navswitch_push_pushed();    
 }
 
-bool ball_packet_valid_p(uint8_t ball_packet) {
-    return !(ball_packet > 38 || ball_packet == 7 || ball_packet == 15 || ball_packet == 23 || ball_packet == 31);
-}
-
-void check_collisions()
+void check_collisions(void)
 {
     switch (game_state) {
         case PITCHER_FIELDING:
-            if (point_equals(fielder, hit_ball)) {
-                ir_uart_putc('F');
+            if (point_equals_p(fielder, hit_ball)) {
+                ir_uart_putc(BALL_FIELDED);
                 pitcher_init(&pitcher);
                 game_state = PITCHER_CHOOSE;
             }
             break;
         case BATTER_RUNNING:
             for (uint8_t base = 0; base < NUM_BASES; base++) {
-                if (point_equals(runner.pos, BASES[(base + 1) % NUM_BASES]) && runner.base_num == base) {
+                if (point_equals_p(runner.pos, BASES[(base + 1) % NUM_BASES]) && runner.base_num == base) {
                     runner.base_num = (runner.base_num + 1) % NUM_BASES;
                     bases_covered++;
                 }
             }
             break;
+        default:
+            break;
     }
 }
 
-void check_ir()
+void check_ir(void)
 {
     uint8_t ball_packet;
     uint8_t hit_packet;
+    uint8_t winner_packet;
 
     switch (game_state) {
         case GAME_LAUNCHED:
             if (ir_uart_read_ready_p()) {
-                if (ir_uart_getc() == 'A') {
+                if (ir_uart_getc() == START_GAME) {
                     game_state = PITCHER_CHOOSE;
                 }            
             }
             break;
         case PITCHER_CHOOSE:
             if (ir_uart_read_ready_p()) {
-                if (ir_uart_getc() == 'E') {
-                    game_state = GAME_END;
+                if (ir_uart_getc() == END_GAME) {
+                    if (ir_uart_read_ready_p()) {
+                        if (bases_covered > ir_uart_getc()) {
+                            winner = 1; // this player is the winner
+                            led_set(LED1, 1);
+                            ir_uart_putc(YOU_LOSE);
+                        } else {
+                            winner = 0;
+                            ir_uart_putc(YOU_WIN);
+                        }
+                        game_state = GAME_OVER;
+                    }
                 }            
             }
             break;   
         case PITCHER_BALL_THROWN:
             if (ir_uart_read_ready_p()) {
                 hit_packet = ir_uart_getc();
-                if (hit_packet == 'X') {
-                    pitcher_init(&pitcher);
-                    game_state = PITCHER_CHOOSE;
-                } else if (hit_packet == 'O') {
+                if (hit_packet == BALL_HIT) {
                     fielder_init(&fielder, &hit_ball);
                     game_state = PITCHER_FIELDING;
-                } else if (hit_packet == 'S') {
+                } else if (hit_packet == BALL_MISSED) {
+                    pitcher_init(&pitcher);
+                    game_state = PITCHER_CHOOSE;
+                } else if (hit_packet == STRIKED_OUT) {
                     if (strikes == 0) {
                         game_state = BATTER_IDLE;
                     } else {
-                        game_state = GAME_END;
-                        ir_uart_putc('E');
+                        game_state = GAME_OVER;       
+
+                        ir_uart_putc(END_GAME);
+                        ir_uart_putc(bases_covered);
                     }
                 }
             }
@@ -252,53 +273,36 @@ void check_ir()
             break;     
         case BATTER_RUNNING:
             if (ir_uart_read_ready_p()) {
-                if (ir_uart_getc() == 'F') {
+                if (ir_uart_getc() == BALL_FIELDED) {
                     batter_init(&batter);
                     game_state = BATTER_IDLE;
                 }           
             }
             break;
+        case GAME_OVER:
+            if (ir_uart_read_ready_p()) {
+                winner_packet = ir_uart_getc();
+                if (winner_packet == YOU_LOSE) {
+                    winner = 0;
+                } else if (winner_packet == YOU_WIN) {
+                    winner = 1;
+                    led_set(LED1, 1);
+
+                }         
+            }
+        default:
+            break;
     }
 }
 
-void update_power_bar() 
-{   
-    if (power_bar.power == LEDMAT_ROWS_NUM - 1)
-        power_bar.increment_value = -1;
-
-    if (power_bar.power == 0)
-        power_bar.increment_value = 1;
-
-    power_bar.power += power_bar.increment_value;
-}
-
-void update_pitched_ball()
-{
-    if (pitched_ball.pos.y < LEDMAT_ROWS_NUM) { // intentionally goes to 7
-        pitched_ball.pos.y++;
-    } else {
-        strikes++;
-        if (strikes == MAX_STRIKES) {
-            game_state = PITCHER_CHOOSE;
-            ir_uart_putc('S');
-            return;
-        }
-        ir_uart_putc('X');
-        batter_init(&batter);
-        game_state = BATTER_IDLE;
-    }        
-}
-
-void draw_hard()
+void draw_hard(void)
 {   
     tinygl_point_t power_bar_left_point = {.x = 0, .y = LEDMAT_ROWS_NUM - 1};
     tinygl_point_t power_bar_right_point = {.x = LEDMAT_COLS_NUM - 1, .y = LEDMAT_ROWS_NUM - 1};
     tinygl_point_t batter_right_point = {.x = batter.pos.x + batter.extra_width, .y = batter.pos.y};
+    tinygl_point_t face_pixel;
 
     switch (game_state) {
-        case GAME_LAUNCHED:
-            //TODO
-            break;
         case PITCHER_CHOOSE:
             tinygl_draw_point(pitcher, 1);
             break;
@@ -322,13 +326,40 @@ void draw_hard()
         case BATTER_RUNNING:
             tinygl_draw_point(runner.pos, 1);
             break;
-        case GAME_END:
-            //TODO
+        case GAME_OVER:
+            if (winner) {
+                for (uint8_t i = 0; i < LEDMAT_COLS_NUM; i++) {
+                    for (uint8_t j = 0; j < LEDMAT_ROWS_NUM; j++) {
+                        face_pixel.x = i;
+                        face_pixel.y = j;
+                        if ((BITMAP_HAPPY[i] >> j) & 1) {
+                            tinygl_draw_point(face_pixel, 1);
+                        } else {
+                            tinygl_draw_point(face_pixel, 0);
+                        }
+                    }
+                }
+            } else {
+                for (uint8_t i = 0; i < LEDMAT_COLS_NUM; i++) {
+                    for (uint8_t j = 0; j < LEDMAT_ROWS_NUM; j++) {
+                        face_pixel.x = i;
+                        face_pixel.y = j;
+                        if ((BITMAP_SAD[i] >> j) & 1) {
+                            tinygl_draw_point(face_pixel, 1);
+                        } else {
+                            tinygl_draw_point(face_pixel, 0);
+                        }
+                    }
+                }
+            }
+            
+            break;
+        default:
             break;
     }
 }
 
-void draw_light()
+void draw_light(void)
 {   
     switch (game_state) {
         case PITCHER_FIELDING:        
@@ -338,7 +369,26 @@ void draw_light()
             for (uint8_t base = 0; base < NUM_BASES; base++)
                 tinygl_draw_point(BASES[base], 1);
             break;
+        default:
+            break;
     }
+}
+
+void update_pitched_ball(void)
+{
+    if (pitched_ball.pos.y < LEDMAT_ROWS_NUM) { // intentionally goes to 7
+        pitched_ball.pos.y++;
+    } else {
+        strikes++;
+        if (strikes == MAX_STRIKES) {
+            game_state = PITCHER_CHOOSE;
+            ir_uart_putc(STRIKED_OUT);
+            return;
+        }
+        ir_uart_putc(BALL_MISSED);
+        batter_init(&batter);
+        game_state = BATTER_IDLE;
+    }        
 }
 
 int main (void)
@@ -346,61 +396,58 @@ int main (void)
     // Initialisation
     system_init ();
     pacer_init(PACER_RATE);
-    tinygl_init(PACER_RATE);
+    tinygl_init (PACER_RATE);
+    tinygl_font_set(&font3x5_1);
+    tinygl_text_mode_set(TINYGL_TEXT_MODE_SCROLL);
+    tinygl_text_dir_set(TINYGL_TEXT_DIR_ROTATE);
+    tinygl_text(" PUSH TO BAT");
+
     navswitch_init();
     led_init();
     led_set(LED1, 0);
     ir_uart_init();
-
     pitcher_init(&pitcher);
     batter_init(&batter);
+    runner.base_num = 0;
+    runner_init(&runner);
+    bases_covered = 0;
+    strikes = 0;
 
     // Declare tick counters
-    uint8_t navswitch_check_ticks;
-    uint8_t collision_check_ticks;
-    uint8_t power_bar_update_ticks;
-    uint8_t pitched_ball_ticks;
-    uint8_t ir_ticks;
-    uint8_t draw_hard_ticks;
-    uint8_t draw_light_ticks;
+    uint8_t action_ticks = 0;
+    uint8_t power_bar_update_ticks = 0;
+    uint8_t pitched_ball_ticks = 0;
+    uint8_t draw_hard_ticks = 0;
+    uint8_t draw_light_ticks = 0;
 
     // Main game loop
     while (1) {
         pacer_wait();
-        tinygl_clear();
 
-        navswitch_check_ticks++;
-        if (navswitch_check_ticks >= PACER_RATE/COLLISION_CHECK_RATE) {
+        if (game_state != GAME_LAUNCHED) tinygl_clear();
+
+        action_ticks++;
+        if (action_ticks >= PACER_RATE/ACTION_RATE) {
             check_navswitch();
-            navswitch_check_ticks = 0;
-        }
-
-        collision_check_ticks++;
-        if (collision_check_ticks >= PACER_RATE/NAVSWITCH_CHECK_RATE) {
             check_collisions();
-            collision_check_ticks = 0;
+            check_ir();
+            action_ticks = 0;
         }
 
+        // state-specific tasks
         if (game_state == PITCHER_TIMING) {
             power_bar_update_ticks++;
             if (power_bar_update_ticks >= PACER_RATE/POWER_BAR_UPDATE_RATE) {
-                update_power_bar();
+                pitcher_power_bar_update(&power_bar);
                 power_bar_update_ticks = 0;
             }
         }
-
         if (game_state == BATTER_BALL_THROWN) {
             pitched_ball_ticks++;
             if (pitched_ball_ticks >= PACER_RATE/pitched_ball.move_rate) {
                 update_pitched_ball();
                 pitched_ball_ticks = 0;
             }
-        }
-
-        ir_ticks++;
-        if (ir_ticks >= PACER_RATE/IR_CHECK_RATE) {
-            check_ir();
-            ir_ticks = 0;
         }
 
         draw_hard_ticks++;

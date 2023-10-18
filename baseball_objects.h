@@ -31,7 +31,7 @@ typedef struct {
     uint8_t extra_width;
 } batter_t;
 
-bool point_equals(tinygl_point_t point1, tinygl_point_t point2);
+bool point_equals_p(tinygl_point_t point1, tinygl_point_t point2);
 
 bool ball_hit_p(ball_t pitched_ball, batter_t batter);
 

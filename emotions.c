@@ -1,41 +1,19 @@
-#include "system.h"
+#include "emotions.h"
 
-/** happy  */
-static const uint8_t bitmapHappy[] =
+const uint8_t BITMAP_HAPPY[] =
 {
-    0b1100011,
-    0b0000000,
-    0b0000000,
+    0b0000100,
     0b0100010,
-    0b0011100
+    0b0000010,
+    0b0100010,
+    0b0000100
 };
 
-/** unhappy  */
-static const uint8_t bitmapUnhappy[] =
+const uint8_t BITMAP_SAD[] =
 {
-    0b0100010,
-    0b1000001,
-    0b0000000,
-    0b0011100,
-    0b0100010
-};
-
-/** angry */
-static const uint8_t bitmapAngry[] =
-{
-    0b1100011,
-    0b0000000,
-    0b0000000,
-    0b0011100,
-    0b0100010
-};
-
-/** furious */
-static const uint8_t bitmapFurious[] =
-{
-    0b1000001,
-    0b0100010,
-    0b0000000,
-    0b0011100,
-    0b0100010
+    0b0000110,
+    0b0101000,
+    0b0001000,
+    0b0101000,
+    0b0000110
 };
