@@ -10,3 +10,4 @@ Authors:
 - Immediately, the ball will be pitched and the batter must be in the correct lane, and push up (north) on their navswitch at the right time, to successfully swing at the ball.
 - If you do manage to hit it, run around the bases (anticlockwise) as fast as you can with the navswitch, before the pitcher fields the ball you just hit.
 - After three strikes, the players swap roles, and whoever ran around the most bases by the end is the winner!
+- To play again, simply push in the navswitch on both FunKits, and you are back to the start!
