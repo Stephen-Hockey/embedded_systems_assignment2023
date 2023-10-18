@@ -284,6 +284,7 @@ void check_ir(void)
                     chosen_pitch_col = ball_packet >> 0x03;
                     chosen_pitch_power = ball_packet & 0x07;
 
+                    // Makes sure the ball is displayed on the opposite side, as the 2 funkits are opposite orientation
                     pitched_ball.pos.x = LEDMAT_COLS_NUM - 1 - chosen_pitch_col;
                     pitched_ball.pos.y = 0;
 
