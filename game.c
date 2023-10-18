@@ -11,10 +11,13 @@
 #include "tinygl.h"
 #include "font.h"
 
+#include "ir_uart.h"
+
 #define PACER_RATE 200
 #define NAVSWITCH_CHECK_RATE 200
 #define DRAW_RATE 200
 #define POWER_BAR_UPDATE_RATE 10
+#define IR_CHECK_RATE 200
 
 typedef enum {
     GAME_LAUNCHED,          /* When a game is first started, roles need to be chosen */
@@ -26,6 +29,10 @@ typedef enum {
     // TODO what happens after ball is hit/missed
 } game_state_t;
 
+/**
+ * The pitcher, which is restricted to east-west movement, and represented by a pixel
+ * 
+*/
 typedef struct {
     uint8_t col;
     const uint8_t row;
@@ -36,6 +43,9 @@ typedef struct {
     int8_t increment_value;
 } power_bar_t;
 
+/**
+ * The batter, which is restricted to east-west movement, and represented by two pixels
+*/
 typedef struct {
     uint8_t col;
     const uint8_t row;
@@ -44,32 +54,13 @@ typedef struct {
 
 static game_state_t game_state = PITCHER_CHOOSE; // Should be set to GAME_LAUNCHED initally
 
-static pitcher_t pitcher = {.col = 2, .row = 3};
+static pitcher_t pitcher = {.col = 2, .row = 3}; 
 static power_bar_t power_bar = {.power = 0, .increment_value = 1};
 static batter_t batter = {.col = 2, .row = 6};
 
 // IR values
 static uint8_t chosen_pitch_col;
 static uint8_t chosen_pitch_power;
-
-/**
- * Checks whether there was a navswitch push event at NAVSWITCH_CHECK_RATE Hz
- * and calls the appropriate function
-*/
-void check_navswitch() {
-    navswitch_update ();
-    if (navswitch_push_event_p (NAVSWITCH_NORTH))
-        navswitch_north_pushed();
-    if (navswitch_push_event_p (NAVSWITCH_SOUTH))
-        navswitch_south_pushed();
-    if (navswitch_push_event_p (NAVSWITCH_EAST))
-        navswitch_east_pushed();
-    if (navswitch_push_event_p (NAVSWITCH_WEST))
-        navswitch_west_pushed();
-    if (navswitch_push_event_p (NAVSWITCH_PUSH))
-        navswitch_push_pushed();
-    
-}
 
 void navswitch_north_pushed()
 {
@@ -125,6 +116,8 @@ void navswitch_east_pushed()
     case PITCHER_BALL_THROWN:
         break;    
     case BATTER_IDLE:
+        if (batter.col < LEDMAT_COLS_NUM - 2)
+            batter.col++;
         break;    
     case BATTER_BALL_THROWN:
         break;        
@@ -147,6 +140,8 @@ void navswitch_west_pushed()
     case PITCHER_BALL_THROWN:
         break;    
     case BATTER_IDLE:
+        if (batter.col > 0)
+            batter.col--;
         break;    
     case BATTER_BALL_THROWN:
         break;        
@@ -168,14 +163,60 @@ void navswitch_push_pushed()
         break;    
     case PITCHER_TIMING:        
         chosen_pitch_power = power_bar.power;
+        // game_state = PITCHER_BALL_THROWN;
+        ir_uart_putc(chosen_pitch_col);
 
-        // TODO IR
-
-        game_state = PITCHER_BALL_THROWN;
         break;    
     case PITCHER_BALL_THROWN:
         break;    
     case BATTER_IDLE:
+        break;    
+    case BATTER_BALL_THROWN:
+        break;        
+    default:
+        break;
+    }
+}
+
+/**
+ * Checks whether there was a navswitch push event at NAVSWITCH_CHECK_RATE Hz
+ * and calls the appropriate function
+*/
+void check_navswitch() {
+    navswitch_update ();
+    if (navswitch_push_event_p (NAVSWITCH_NORTH))
+        navswitch_north_pushed();
+    if (navswitch_push_event_p (NAVSWITCH_SOUTH))
+        navswitch_south_pushed();
+    if (navswitch_push_event_p (NAVSWITCH_EAST))
+        navswitch_east_pushed();
+    if (navswitch_push_event_p (NAVSWITCH_WEST))
+        navswitch_west_pushed();
+    if (navswitch_push_event_p (NAVSWITCH_PUSH))
+        navswitch_push_pushed();
+    
+}
+
+
+void check_ir()
+{
+    uint8_t ballPacket;
+    switch (game_state) {
+    case GAME_LAUNCHED:
+        break;
+    case PITCHER_CHOOSE:
+        break;    
+    case PITCHER_TIMING:
+        break;    
+    case PITCHER_BALL_THROWN:
+        break;    
+    case BATTER_IDLE:
+
+        if (ir_uart_read_ready_p()) {
+            ballPacket = ir_uart_getc();
+            chosen_pitch_col = ballPacket;
+            game_state = GAME_LAUNCHED;
+        }
         break;    
     case BATTER_BALL_THROWN:
         break;        
@@ -201,9 +242,12 @@ void draw_all()
     tinygl_point_t pitcher_point = {pitcher.col, pitcher.row};
     tinygl_point_t power_bar_left_point = {.x = 0};
     tinygl_point_t power_bar_right_point = {.x = LEDMAT_COLS_NUM - 1};
+    tinygl_point_t batter_left_point = {batter.col, batter.row};
+    tinygl_point_t batter_right_point = {batter.col + 1, batter.row};
 
     switch (game_state) {
     case GAME_LAUNCHED:
+        display_pixel_set(chosen_pitch_col, 0, 1);
         break;
     case PITCHER_CHOOSE:
         tinygl_draw_point(pitcher_point, 1);  
@@ -218,6 +262,7 @@ void draw_all()
     case PITCHER_BALL_THROWN:
         break;    
     case BATTER_IDLE:
+        tinygl_draw_line(batter_left_point, batter_right_point, 1);
         break;    
     case BATTER_BALL_THROWN:
         break;        
@@ -234,12 +279,18 @@ int main (void)
     tinygl_init(PACER_RATE);
     navswitch_init();
     button_init();
-    // led_init();
+    led_init();
+    led_set(LED1, 0);
+    ir_uart_init();
+
+
 
     // Declare tick counters
     uint8_t navswitch_check_ticks;
     uint8_t power_bar_update_ticks;
+    uint8_t ir_ticks;
     uint8_t draw_ticks;
+    
 
     // Main game loop
     while (1) {
@@ -260,7 +311,13 @@ int main (void)
                 power_bar_update_ticks = 0;
             }
         }
-        
+
+
+        ir_ticks++;
+        if (ir_ticks >= PACER_RATE/IR_CHECK_RATE) {
+            check_ir();
+            ir_ticks = 0;
+        }
 
         draw_ticks++;
         if (draw_ticks >= PACER_RATE/DRAW_RATE) {
