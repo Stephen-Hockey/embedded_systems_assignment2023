@@ -67,10 +67,16 @@ ir_uart.o: ../../drivers/avr/ir_uart.c ../../drivers/avr/ir_uart.h ../../drivers
 baseball_objects.o: baseball_objects.c baseball_objects.h ../../drivers/avr/system.h ../../utils/tinygl.h
 	$(CC) -c $(CFLAGS) $< -o $@
 
+pitcher.o: pitcher.c pitcher.h baseball_objects.h
+	$(CC) -c $(CFLAGS) $< -o $@
+
+batter.o: batter.c batter.h baseball_objects.h
+	$(CC) -c $(CFLAGS) $< -o $@
+
 
 
 # Link: create ELF output file from object files.
-game.out: game.o system.o pio.o timer.o pacer.o button.o navswitch.o led.o ledmat.o display.o tinygl.o font.o timer0.o usart1.o prescale.o ir_uart.o baseball_objects.o
+game.out: game.o system.o pio.o timer.o pacer.o button.o navswitch.o led.o ledmat.o display.o tinygl.o font.o timer0.o usart1.o prescale.o ir_uart.o baseball_objects.o pitcher.o batter.o
 	$(CC) $(CFLAGS) $^ -o $@ -lm
 	$(SIZE) $@
 

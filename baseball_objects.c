@@ -1,10 +1,11 @@
 #include "baseball_objects.h"
 
 const tinygl_point_t BASES[] = {
-    {.x = 3, .y = 4},
-    {.x = 3, .y = 2},
-    {.x = 1, .y = 2},
-    {.x = 1, .y = 4}
+    {.x = 1, .y = 4},   // Home
+    {.x = 3, .y = 4},   // First
+    {.x = 3, .y = 2},   // Second
+    {.x = 1, .y = 2}    // Third
+    
 };
 
 /**
