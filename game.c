@@ -36,12 +36,21 @@ typedef struct {
     int8_t increment_value;
 } power_bar_t;
 
+typedef struct {
+    uint8_t col;
+    const uint8_t row;
+} batter_t;
+
 
 static game_state_t game_state = PITCHER_CHOOSE; // Should be set to GAME_LAUNCHED initally
 
-static pitcher_t pitcher = {2, 3};
+static pitcher_t pitcher = {.col = 2, .row = 3};
+static power_bar_t power_bar = {.power = 0, .increment_value = 1};
+static batter_t batter = {.col = 2, .row = 6};
 
-static power_bar_t power_bar = {1, 1};
+// IR values
+static uint8_t chosen_pitch_col;
+static uint8_t chosen_pitch_power;
 
 /**
  * Checks whether there was a navswitch push event at NAVSWITCH_CHECK_RATE Hz
@@ -152,11 +161,16 @@ void navswitch_push_pushed()
     case GAME_LAUNCHED:
         break;
     case PITCHER_CHOOSE:
+        chosen_pitch_col = pitcher.col;
         power_bar.power = 0;
         power_bar.increment_value = 1;
         game_state = PITCHER_TIMING;
         break;    
     case PITCHER_TIMING:        
+        chosen_pitch_power = power_bar.power;
+
+        // TODO IR
+
         game_state = PITCHER_BALL_THROWN;
         break;    
     case PITCHER_BALL_THROWN:
@@ -183,9 +197,11 @@ void update_power_bar()
 
 void draw_all()
 {   
+    // declare here because not allowed to inside of case blocks
     tinygl_point_t pitcher_point = {pitcher.col, pitcher.row};
     tinygl_point_t power_bar_left_point = {.x = 0};
     tinygl_point_t power_bar_right_point = {.x = LEDMAT_COLS_NUM - 1};
+
     switch (game_state) {
     case GAME_LAUNCHED:
         break;
