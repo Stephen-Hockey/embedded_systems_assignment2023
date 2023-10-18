@@ -13,9 +13,10 @@
 
 #define PACER_RATE 200
 #define NAVSWITCH_CHECK_RATE 200
+#define DRAW_RATE 200
+#define POWER_BAR_UPDATE_RATE 10
 
-typedef enum
-{
+typedef enum {
     GAME_LAUNCHED,          /* When a game is first started, roles need to be chosen */
     PITCHER_CHOOSE,         /* Pitcher is choosing what lane to throw the ball down */
     PITCHER_TIMING,         /* Pitcher is timing the power of his shot */
@@ -25,15 +26,22 @@ typedef enum
     // TODO what happens after ball is hit/missed
 } game_state_t;
 
-typedef struct
-{
+typedef struct {
     uint8_t col;
     const uint8_t row;
 } pitcher_t;
 
+typedef struct {
+    uint8_t power;
+    int8_t increment_value;
+} power_bar_t;
+
+
 static game_state_t game_state = PITCHER_CHOOSE; // Should be set to GAME_LAUNCHED initally
 
 static pitcher_t pitcher = {2, 3};
+
+static power_bar_t power_bar = {1, 1};
 
 /**
  * Checks whether there was a navswitch push event at NAVSWITCH_CHECK_RATE Hz
@@ -144,9 +152,12 @@ void navswitch_push_pushed()
     case GAME_LAUNCHED:
         break;
     case PITCHER_CHOOSE:
+        power_bar.power = 0;
+        power_bar.increment_value = 1;
         game_state = PITCHER_TIMING;
         break;    
-    case PITCHER_TIMING:
+    case PITCHER_TIMING:        
+        game_state = PITCHER_BALL_THROWN;
         break;    
     case PITCHER_BALL_THROWN:
         break;    
@@ -159,15 +170,34 @@ void navswitch_push_pushed()
     }
 }
 
+void update_power_bar() 
+{   
+    if (power_bar.power == LEDMAT_ROWS_NUM - 1)
+        power_bar.increment_value = -1;
+
+    if (power_bar.power == 0)
+        power_bar.increment_value = 1;
+
+    power_bar.power += power_bar.increment_value;
+}
+
 void draw_all()
 {   
+    tinygl_point_t pitcher_point = {pitcher.col, pitcher.row};
+    tinygl_point_t power_bar_left_point = {.x = 0};
+    tinygl_point_t power_bar_right_point = {.x = LEDMAT_COLS_NUM - 1};
     switch (game_state) {
     case GAME_LAUNCHED:
         break;
     case PITCHER_CHOOSE:
-        display_pixel_set(pitcher.col, pitcher.row, 1);  
+        tinygl_draw_point(pitcher_point, 1);  
         break;
     case PITCHER_TIMING:
+        for (uint8_t i = 0; i <= power_bar.power; i++) {
+            power_bar_left_point.y = LEDMAT_ROWS_NUM - 1 - i;
+            power_bar_right_point.y = LEDMAT_ROWS_NUM - 1 - i;
+            tinygl_draw_line(power_bar_left_point, power_bar_right_point, 1);            
+        }
         break;    
     case PITCHER_BALL_THROWN:
         break;    
@@ -192,6 +222,8 @@ int main (void)
 
     // Declare tick counters
     uint8_t navswitch_check_ticks;
+    uint8_t power_bar_update_ticks;
+    uint8_t draw_ticks;
 
     // Main game loop
     while (1) {
@@ -203,8 +235,23 @@ int main (void)
             check_navswitch();
             navswitch_check_ticks = 0;
         }
+
+        //TODO look towards putting this in a greater 'logic' function
+        if (game_state == PITCHER_TIMING) {
+            power_bar_update_ticks++;
+            if (power_bar_update_ticks >= PACER_RATE/POWER_BAR_UPDATE_RATE) {
+                update_power_bar();
+                power_bar_update_ticks = 0;
+            }
+        }
         
-        draw_all();
+
+        draw_ticks++;
+        if (draw_ticks >= PACER_RATE/DRAW_RATE) {
+            draw_all();
+            draw_ticks = 0;
+        }
+        
         tinygl_update ();
     }
 }
