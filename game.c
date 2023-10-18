@@ -1,9 +1,14 @@
+/** @file game.c
+ *  @authors Stephen Hockey, Xinwei Wang
+ *  @date 19 Oct 2023
+ *  @brief The main file of a baseball-themed game
+*/
+
 #include "system.h"
 #include "pio.h"
 #include "timer.h"
 #include "pacer.h"
 #include "navswitch.h"
-#include "led.h"
 #include "ledmat.h"
 #include "display.h"
 #include "tinygl.h"
@@ -14,16 +19,19 @@
 #include "pitcher.h"
 #include "batter.h"
 #include "ir_handler.h"
-#include "emotions.h"
+#include "graphics.h"
 
+// Rates for the pacer in Hz
 #define PACER_RATE 200
 #define ACTION_RATE 100
 #define DRAW_HARD_RATE 200
 #define DRAW_LIGHT_RATE 50
-#define POWER_BAR_UPDATE_RATE 20
+#define POWER_BAR_UPDATE_RATE 25
 
+// The state that the FunKit is currently in. This allows for many different roles and types of gameplay
 game_state_t game_state = GAME_LAUNCHED;
 
+// The moving parts that need to displayed on the LED matrix
 tinygl_point_t pitcher;
 batter_t batter;
 tinygl_point_t fielder;
@@ -32,13 +40,18 @@ ball_t pitched_ball;
 runner_t runner;
 power_bar_t power_bar;
 
+// Game scores. Winner is decided based on bases_covered
 uint8_t bases_covered;
 uint8_t strikes;
 bool winner;
 
+// The chosen pitch column and power of a given pitch
 uint8_t chosen_pitch_col;
 uint8_t chosen_pitch_power;
 
+/**
+ * Controls what happens when the north navswitch button is pressed
+*/
 void navswitch_north_pushed(void)
 {
     switch (game_state) {
@@ -60,6 +73,9 @@ void navswitch_north_pushed(void)
     }
 }
 
+/**
+ * Controls what happens when the south navswitch button is pressed
+*/
 void navswitch_south_pushed(void)
 {
     switch (game_state) {
@@ -74,6 +90,9 @@ void navswitch_south_pushed(void)
     }
 }
 
+/**
+ * Controls what happens when the east navswitch button is pressed
+*/
 void navswitch_east_pushed(void)
 {
     switch (game_state) {
@@ -97,6 +116,9 @@ void navswitch_east_pushed(void)
     }
 }
 
+/**
+ * Controls what happens when the west navswitch button is pressed
+*/
 void navswitch_west_pushed(void)
 {   
     switch (game_state) {
@@ -120,6 +142,9 @@ void navswitch_west_pushed(void)
     }
 }
 
+/**
+ * Controls what happens when the navswitch push button is pressed
+*/
 void navswitch_push_pushed(void)
 {
     uint8_t ball_packet; 
@@ -139,14 +164,19 @@ void navswitch_push_pushed(void)
             ir_uart_putc(ball_packet);
             game_state = PITCHER_BALL_THROWN;
             break;
+        case GAME_OVER:
+            strikes = 0;
+            bases_covered = 0;
+            runner.base_num = 0;
+            tinygl_text(LAUNCH_MSG);   
+            game_state = GAME_LAUNCHED;
         default:
             break;
     }
 }
 
 /**
- * Checks whether there was a navswitch push event at NAVSWITCH_CHECK_RATE Hz
- * and calls the appropriate function
+ * Checks whether there was a navswitch push event and redirects to the appropriate function
 */
 void check_navswitch(void) 
 {
@@ -163,6 +193,10 @@ void check_navswitch(void)
         navswitch_push_pushed();    
 }
 
+/**
+ * Checks whether an object has touched another.
+ * This is important for the fielder touching the hit ball, and the runner touching the bases.
+*/
 void check_collisions(void)
 {
     switch (game_state) {
@@ -186,6 +220,9 @@ void check_collisions(void)
     }
 }
 
+/**
+ * Checks for IR message reception and takes the appropriate action
+*/
 void check_ir(void)
 {
     uint8_t ball_packet;
@@ -202,19 +239,14 @@ void check_ir(void)
             break;
         case PITCHER_CHOOSE:
             if (ir_uart_read_ready_p()) {
-                if (ir_uart_getc() == END_GAME) {
-                    if (ir_uart_read_ready_p()) {
-                        if (bases_covered > ir_uart_getc()) {
-                            winner = 1; // this player is the winner
-                            led_set(LED1, 1);
-                            ir_uart_putc(YOU_LOSE);
-                        } else {
-                            winner = 0;
-                            ir_uart_putc(YOU_WIN);
-                        }
-                        game_state = GAME_OVER;
-                    }
-                }            
+                if (bases_covered > ir_uart_getc()) {
+                    winner = 1; // this player is the winner
+                    ir_uart_putc(YOU_LOSE);
+                } else {
+                    winner = 0;
+                    ir_uart_putc(YOU_WIN);
+                }
+                game_state = GAME_OVER;
             }
             break;   
         case PITCHER_BALL_THROWN:
@@ -226,15 +258,17 @@ void check_ir(void)
                 } else if (hit_packet == BALL_MISSED) {
                     pitcher_init(&pitcher);
                     game_state = PITCHER_CHOOSE;
-                } else if (hit_packet == STRIKED_OUT) {
-                    if (strikes == 0) {
-                        game_state = BATTER_IDLE;
-                    } else {
-                        game_state = GAME_OVER;       
+                } else if (hit_packet == STRIKED_OUT && strikes == 0) {
+                    game_state = BATTER_IDLE;
+                } else if (hit_packet == STRIKED_OUT && strikes > 0) {
+                    ir_uart_putc(bases_covered);
+                } else if (hit_packet == YOU_LOSE) {
+                    winner = 0;
+                    game_state = GAME_OVER;
+                } else if (hit_packet == YOU_WIN) {
+                    winner = 1;
+                    game_state = GAME_OVER;
 
-                        ir_uart_putc(END_GAME);
-                        ir_uart_putc(bases_covered);
-                    }
                 }
             }
             break;
@@ -286,8 +320,6 @@ void check_ir(void)
                     winner = 0;
                 } else if (winner_packet == YOU_WIN) {
                     winner = 1;
-                    led_set(LED1, 1);
-
                 }         
             }
         default:
@@ -295,12 +327,14 @@ void check_ir(void)
     }
 }
 
+/**
+ * Displays what needs to be displayed as solid LED, as opposed to flickering. This is most of the display.
+*/
 void draw_hard(void)
 {   
     tinygl_point_t power_bar_left_point = {.x = 0, .y = LEDMAT_ROWS_NUM - 1};
     tinygl_point_t power_bar_right_point = {.x = LEDMAT_COLS_NUM - 1, .y = LEDMAT_ROWS_NUM - 1};
     tinygl_point_t batter_right_point = {.x = batter.pos.x + batter.extra_width, .y = batter.pos.y};
-    tinygl_point_t face_pixel;
 
     switch (game_state) {
         case PITCHER_CHOOSE:
@@ -328,37 +362,20 @@ void draw_hard(void)
             break;
         case GAME_OVER:
             if (winner) {
-                for (uint8_t i = 0; i < LEDMAT_COLS_NUM; i++) {
-                    for (uint8_t j = 0; j < LEDMAT_ROWS_NUM; j++) {
-                        face_pixel.x = i;
-                        face_pixel.y = j;
-                        if ((BITMAP_HAPPY[i] >> j) & 1) {
-                            tinygl_draw_point(face_pixel, 1);
-                        } else {
-                            tinygl_draw_point(face_pixel, 0);
-                        }
-                    }
-                }
+                draw_bitmap(BITMAP_HAPPY);
             } else {
-                for (uint8_t i = 0; i < LEDMAT_COLS_NUM; i++) {
-                    for (uint8_t j = 0; j < LEDMAT_ROWS_NUM; j++) {
-                        face_pixel.x = i;
-                        face_pixel.y = j;
-                        if ((BITMAP_SAD[i] >> j) & 1) {
-                            tinygl_draw_point(face_pixel, 1);
-                        } else {
-                            tinygl_draw_point(face_pixel, 0);
-                        }
-                    }
-                }
-            }
-            
+                draw_bitmap(BITMAP_SAD);
+            }            
             break;
         default:
             break;
     }
 }
 
+/**
+ * Displays things at a lower frequency, achieving an effect that distinguishes some objects from others.
+ * It is like having two colours. This is used to draw the bases and the hit ball.
+*/
 void draw_light(void)
 {   
     switch (game_state) {
@@ -374,6 +391,10 @@ void draw_light(void)
     }
 }
 
+/**
+ * Updates the location of the ball as the batter sees it being pitched at him.
+ * Triggers a strike once off the screen.
+*/
 void update_pitched_ball(void)
 {
     if (pitched_ball.pos.y < LEDMAT_ROWS_NUM) { // intentionally goes to 7
@@ -391,21 +412,23 @@ void update_pitched_ball(void)
     }        
 }
 
+/**
+ * The main program function
+*/
 int main (void)
 {   
-    // Initialisation
+    // Initialisation of modules
     system_init ();
     pacer_init(PACER_RATE);
     tinygl_init (PACER_RATE);
     tinygl_font_set(&font3x5_1);
     tinygl_text_mode_set(TINYGL_TEXT_MODE_SCROLL);
     tinygl_text_dir_set(TINYGL_TEXT_DIR_ROTATE);
-    tinygl_text(" PUSH TO BAT");
-
+    tinygl_text(LAUNCH_MSG);    
     navswitch_init();
-    led_init();
-    led_set(LED1, 0);
     ir_uart_init();
+    
+    //Initialisation of baseball objects and scores
     pitcher_init(&pitcher);
     batter_init(&batter);
     runner.base_num = 0;
@@ -420,10 +443,11 @@ int main (void)
     uint8_t draw_hard_ticks = 0;
     uint8_t draw_light_ticks = 0;
 
-    // Main game loop
+    // Main game loop that utilizes a pacer architecture
     while (1) {
         pacer_wait();
 
+        // Clearing the display when text is being displayed doesn't work very well.
         if (game_state != GAME_LAUNCHED) tinygl_clear();
 
         action_ticks++;
@@ -434,7 +458,7 @@ int main (void)
             action_ticks = 0;
         }
 
-        // state-specific tasks
+        // state-specific task
         if (game_state == PITCHER_TIMING) {
             power_bar_update_ticks++;
             if (power_bar_update_ticks >= PACER_RATE/POWER_BAR_UPDATE_RATE) {
@@ -442,6 +466,8 @@ int main (void)
                 power_bar_update_ticks = 0;
             }
         }
+
+        // state-specific task
         if (game_state == BATTER_BALL_THROWN) {
             pitched_ball_ticks++;
             if (pitched_ball_ticks >= PACER_RATE/pitched_ball.move_rate) {

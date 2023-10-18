@@ -1,3 +1,9 @@
+/** @file game_states.h
+ *  @authors Stephen Hockey, Xinwei Wang
+ *  @date 19 Oct 2023
+ *  @brief This module simply contains the enum of possible game states
+*/
+
 #ifndef GAME_STATES_H
 #define GAME_STATES_H
 
@@ -10,7 +16,7 @@ typedef enum {
     BATTER_IDLE,            /* Batter is waiting for the ball to be thrown */
     BATTER_BALL_THROWN,     /* Ball comes towards batter for them to swing at */
     BATTER_RUNNING,         /* Ball has been hit and batter can run around the bases */
-    GAME_OVER                /* Both players have had a chance at both roles and the game is over */
+    GAME_OVER               /* Both players have had a chance at both roles and the game is over */
 } game_state_t;
 
 #endif

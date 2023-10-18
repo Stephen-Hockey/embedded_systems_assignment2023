@@ -1,6 +1,6 @@
 # File:   Makefile
-# Author: M. P. Hayes, UCECE
-# Date:   12 Sep 2010
+# Author: Stephen Hockey, Xinwei Wang
+# Date:   19 Oct 2023
 # Descr:  Makefile for game
 
 # Definitions.
@@ -35,9 +35,6 @@ button.o: ../../drivers/button.c ../../drivers/avr/pio.h ../../drivers/avr/syste
 	$(CC) -c $(CFLAGS) $< -o $@
 
 navswitch.o: ../../drivers/navswitch.c ../../drivers/avr/delay.h ../../drivers/avr/pio.h ../../drivers/avr/system.h ../../drivers/navswitch.h
-	$(CC) -c $(CFLAGS) $< -o $@
-
-led.o: ../../drivers/led.c ../../drivers/avr/pio.h ../../drivers/avr/system.h ../../drivers/led.h
 	$(CC) -c $(CFLAGS) $< -o $@
 
 ledmat.o: ../../drivers/ledmat.c ../../drivers/avr/pio.h ../../drivers/avr/system.h ../../drivers/ledmat.h
@@ -76,10 +73,13 @@ batter.o: batter.c batter.h baseball_objects.h
 ir_handler.o: ir_handler.c ir_handler.h ../../drivers/avr/system.h
 	$(CC) -c $(CFLAGS) $< -o $@
 
+graphics.o: graphics.c graphics.h ../../drivers/avr/system.h ../../utils/tinygl.h
+	$(CC) -c $(CFLAGS) $< -o $@
+
 
 
 # Link: create ELF output file from object files.
-game.out: game.o system.o pio.o timer.o pacer.o button.o navswitch.o led.o ledmat.o display.o tinygl.o font.o timer0.o usart1.o prescale.o ir_uart.o baseball_objects.o pitcher.o batter.o ir_handler.o emotions.o
+game.out: game.o system.o pio.o timer.o pacer.o button.o navswitch.o led.o ledmat.o display.o tinygl.o font.o timer0.o usart1.o prescale.o ir_uart.o baseball_objects.o pitcher.o batter.o ir_handler.o graphics.o
 	$(CC) $(CFLAGS) $^ -o $@ -lm
 	$(SIZE) $@
 
