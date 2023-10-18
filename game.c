@@ -76,7 +76,9 @@ static uint8_t chosen_pitch_power;
 static const char LAUNCH_MSG[] = "BATTER UP?"; //TODO
 
 bool ball_hit_p() {
-    return 1;
+    bool good_timing = thrown_ball.row >= 4 && thrown_ball.row <= 6;
+    bool good_positioning = batter.col >= thrown_ball.col - 1 && batter.col <= thrown_ball.col;
+    return good_timing && good_positioning;
 }
 
 void navswitch_north_pushed()
@@ -89,16 +91,17 @@ void navswitch_north_pushed()
     case PITCHER_TIMING:
         break;    
     case PITCHER_BALL_THROWN:
-        // the swing
-        if (ball_hit_p) {
-            homeruns++;
-        } else {
-            strikes++;
-        }
         break;    
     case BATTER_IDLE:
         break;    
     case BATTER_BALL_THROWN:
+        // the swing
+        if (ball_hit_p()) {
+            homeruns++;
+            led_set(LED1, 1);
+        } else {
+            strikes++;
+        }
         break;        
     default:
         break;
@@ -265,18 +268,17 @@ void check_ir()
                     thrown_ball.tick_rate = 2;
                     break; 
                 case 1:
-                    thrown_ball.tick_rate = 4;
-                    break;
                 case 2:
                 case 3:
-                    thrown_ball.tick_rate = 8;
+                    thrown_ball.tick_rate = 5;
                     break;    
                 case 4:
+                    thrown_ball.tick_rate = 10;
                 case 5:
-                    thrown_ball.tick_rate = 12;
+                    thrown_ball.tick_rate = 20;
                     break;    
                 case 6:
-                    thrown_ball.tick_rate = 20;
+                    thrown_ball.tick_rate = 40;
                     break;        
                 default:
                     break;
@@ -308,7 +310,7 @@ void update_thrown_ball()
     if (thrown_ball.row < LEDMAT_ROWS_NUM - 1) {
         thrown_ball.row++;
     } else {
-        
+
     }
         
 }
@@ -343,7 +345,6 @@ void draw_all()
     case BATTER_BALL_THROWN:
         tinygl_draw_point(thrown_ball_point, 1);
         tinygl_draw_line(batter_left_point, batter_right_point, 1);
-
         break;        
     default:
         break;
