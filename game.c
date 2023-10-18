@@ -103,20 +103,10 @@ bool point_equals(tinygl_point_t point1, tinygl_point_t point2)
 void navswitch_north_pushed()
 {
     switch (game_state) {
-        case GAME_LAUNCHED:
-            break;
-        case PITCHER_CHOOSE:
-            break;    
-        case PITCHER_TIMING:
-            break;    
-        case PITCHER_BALL_THROWN:
-            break;    
         case PITCHER_FIELDING:
             if (fielder.y > 0)
                 fielder.y--;
             break;
-        case BATTER_IDLE:
-            break;    
         case BATTER_BALL_THROWN:
             if (ball_hit_p()) {
                 runner.pos.x = 1;
@@ -129,7 +119,6 @@ void navswitch_north_pushed()
         case BATTER_RUNNING:
             if (runner.pos.y > 0)
                 runner.pos.y--;
-        default:
             break;
     }
 }
@@ -137,27 +126,13 @@ void navswitch_north_pushed()
 void navswitch_south_pushed()
 {
     switch (game_state) {
-        case GAME_LAUNCHED:
-            break;
-        case PITCHER_CHOOSE:
-            break;    
-        case PITCHER_TIMING:
-            break;    
-        case PITCHER_BALL_THROWN:
-            break;    
         case PITCHER_FIELDING:
             if (fielder.y < LEDMAT_ROWS_NUM - 1)
                 fielder.y++;        
             break;
-        case BATTER_IDLE:
-            break;    
-        case BATTER_BALL_THROWN:
-            break;        
         case BATTER_RUNNING:
             if (runner.pos.y < LEDMAT_ROWS_NUM - 1)
                 runner.pos.y++;
-            break;
-        default:
             break;
     }
 }
@@ -165,15 +140,9 @@ void navswitch_south_pushed()
 void navswitch_east_pushed()
 {
     switch (game_state) {
-        case GAME_LAUNCHED:
-            break;
         case PITCHER_CHOOSE:
             if (pitcher.x < LEDMAT_COLS_NUM - 1)
                 pitcher.x++;
-            break;    
-        case PITCHER_TIMING:
-            break;    
-        case PITCHER_BALL_THROWN:    
             break;    
         case PITCHER_FIELDING:
             if (fielder.x < LEDMAT_COLS_NUM - 1)
@@ -190,8 +159,6 @@ void navswitch_east_pushed()
         case BATTER_RUNNING:
             if (runner.pos.x < LEDMAT_COLS_NUM - 1)
                 runner.pos.x++;
-            break;     
-        default:
             break;
     }
 }
@@ -199,16 +166,10 @@ void navswitch_east_pushed()
 void navswitch_west_pushed()
 {   
     switch (game_state) {
-        case GAME_LAUNCHED:
-            break;
         case PITCHER_CHOOSE:
             if (pitcher.x > 0)
                 pitcher.x--;
-            break;    
-        case PITCHER_TIMING:
-            break;    
-        case PITCHER_BALL_THROWN:
-            break;    
+            break;  
         case PITCHER_FIELDING:
             if (fielder.x > 0)
                 fielder.x--;
@@ -224,8 +185,6 @@ void navswitch_west_pushed()
         case BATTER_RUNNING:
             if (runner.pos.x > 0)
                 runner.pos.x--;
-            break;
-        default:
             break;
     }
 }
@@ -249,18 +208,6 @@ void navswitch_push_pushed()
             ball_packet = (chosen_pitch_col << 3) | chosen_pitch_power;
             ir_uart_putc(ball_packet);
             game_state = PITCHER_BALL_THROWN;
-            break;    
-        case PITCHER_BALL_THROWN:
-            break;    
-        case PITCHER_FIELDING:
-            break;
-        case BATTER_IDLE:
-            break;    
-        case BATTER_BALL_THROWN:
-            break;        
-        case BATTER_RUNNING:
-            break;
-        default:
             break;
     }
 }
@@ -290,14 +237,6 @@ bool ball_packet_valid_p(uint8_t ball_packet) {
 void check_collisions()
 {
     switch (game_state) {
-        case GAME_LAUNCHED:
-            break;
-        case PITCHER_CHOOSE:
-            break;    
-        case PITCHER_TIMING:
-            break;    
-        case PITCHER_BALL_THROWN:
-            break;    
         case PITCHER_FIELDING:
             if (point_equals(fielder, landed_ball)) {
                 ir_uart_putc('F');
@@ -305,10 +244,6 @@ void check_collisions()
                 game_state = PITCHER_CHOOSE;
             }
             break;
-        case BATTER_IDLE:
-            break;    
-        case BATTER_BALL_THROWN:
-            break;        
         case BATTER_RUNNING:
             if (point_equals(runner.pos, FIRST_BASE) && runner.base_num == 0)
                 runner.base_num = 1;
@@ -321,8 +256,6 @@ void check_collisions()
                 homeruns++;
             }
             break;
-        default:
-            break;
     }
 }
 
@@ -333,94 +266,86 @@ void check_ir()
     uint8_t random_corner;
 
     switch (game_state) {
-    case GAME_LAUNCHED:
-        if (ir_uart_read_ready_p()) {
-            if (ir_uart_getc() == 'A') {
-                game_state = PITCHER_CHOOSE;
-            }            
-        }
-        break;
-    case PITCHER_CHOOSE:
-        if (ir_uart_read_ready_p()) {
-            if (ir_uart_getc() == 'E') {
-                game_state = GAME_END;
-            }            
-        }
-        break;    
-    case PITCHER_TIMING:
-        break;    
-    case PITCHER_BALL_THROWN:
-        if (ir_uart_read_ready_p()) {
-            hit_packet = ir_uart_getc();
-            if (hit_packet == 'X') {
-                pitcher.x = CNTR_COL;
-                game_state = PITCHER_CHOOSE;
-            } else if (hit_packet == 'O') {
-                random_corner = rand() % 4;
-
-                fielder.x = (LEDMAT_COLS_NUM - 1) * (random_corner >> 1);
-                fielder.y = (LEDMAT_ROWS_NUM - 1) * (random_corner & 1);
-                landed_ball.x = (LEDMAT_COLS_NUM - 1) * !(random_corner >> 1);
-                landed_ball.y = (LEDMAT_ROWS_NUM - 1) * !(random_corner & 1);     
-
-                game_state = PITCHER_FIELDING;
-            } else if (hit_packet == 'S') {
-                if (strikes == 0) {
-                    game_state = BATTER_IDLE;
-                } else {
+        case GAME_LAUNCHED:
+            if (ir_uart_read_ready_p()) {
+                if (ir_uart_getc() == 'A') {
+                    game_state = PITCHER_CHOOSE;
+                }            
+            }
+            break;
+        case PITCHER_CHOOSE:
+            if (ir_uart_read_ready_p()) {
+                if (ir_uart_getc() == 'E') {
                     game_state = GAME_END;
-                    ir_uart_putc('E');
+                }            
+            }
+            break;   
+        case PITCHER_BALL_THROWN:
+            if (ir_uart_read_ready_p()) {
+                hit_packet = ir_uart_getc();
+                if (hit_packet == 'X') {
+                    pitcher.x = CNTR_COL;
+                    game_state = PITCHER_CHOOSE;
+                } else if (hit_packet == 'O') {
+                    random_corner = rand() % 4;
+
+                    fielder.x = (LEDMAT_COLS_NUM - 1) * (random_corner >> 1);
+                    fielder.y = (LEDMAT_ROWS_NUM - 1) * (random_corner & 1);
+                    landed_ball.x = (LEDMAT_COLS_NUM - 1) * !(random_corner >> 1);
+                    landed_ball.y = (LEDMAT_ROWS_NUM - 1) * !(random_corner & 1);     
+
+                    game_state = PITCHER_FIELDING;
+                } else if (hit_packet == 'S') {
+                    if (strikes == 0) {
+                        game_state = BATTER_IDLE;
+                    } else {
+                        game_state = GAME_END;
+                        ir_uart_putc('E');
+                    }
                 }
             }
-        }
-        break;    
-    case PITCHER_FIELDING:
-        break;
-    case BATTER_IDLE:
-        if (ir_uart_read_ready_p()) {
-            ball_packet = ir_uart_getc();
-            if (ball_packet_valid_p(ball_packet)) {
-                chosen_pitch_col = ball_packet >> 0x03;
-                chosen_pitch_power = ball_packet & 0x07;
-                thrown_ball.pos.x = LEDMAT_COLS_NUM - 1 - chosen_pitch_col;
-                thrown_ball.pos.y = 0;
-                switch (chosen_pitch_power)
-                {
-                case 0:
-                    thrown_ball.move_rate = 2;
-                    break; 
-                case 1:
-                case 2:
-                case 3:
-                    thrown_ball.move_rate = 5;
-                    break;    
-                case 4:
-                    thrown_ball.move_rate = 10;
-                case 5:
-                    thrown_ball.move_rate = 20;
-                    break;    
-                case 6:
-                    thrown_ball.move_rate = 40;
-                    break;        
-                default:
-                    break;
-                }
-                game_state = BATTER_BALL_THROWN;
-            }            
-        }
-        break;    
-    case BATTER_BALL_THROWN:
-        break;        
-    case BATTER_RUNNING:
-        if (ir_uart_read_ready_p()) {
-            if (ir_uart_getc() == 'F') {
-                batter.pos.x = CNTR_COL;
-                game_state = BATTER_IDLE;
-            }           
-        }
-        break;
-    default:
-        break;
+            break;
+        case BATTER_IDLE:
+            if (ir_uart_read_ready_p()) {
+                ball_packet = ir_uart_getc();
+                if (ball_packet_valid_p(ball_packet)) {
+                    chosen_pitch_col = ball_packet >> 0x03;
+                    chosen_pitch_power = ball_packet & 0x07;
+                    thrown_ball.pos.x = LEDMAT_COLS_NUM - 1 - chosen_pitch_col;
+                    thrown_ball.pos.y = 0;
+                    switch (chosen_pitch_power)
+                    {
+                    case 0:
+                        thrown_ball.move_rate = 2;
+                        break; 
+                    case 1:
+                    case 2:
+                    case 3:
+                        thrown_ball.move_rate = 5;
+                        break;    
+                    case 4:
+                        thrown_ball.move_rate = 10;
+                    case 5:
+                        thrown_ball.move_rate = 20;
+                        break;    
+                    case 6:
+                        thrown_ball.move_rate = 40;
+                        break;        
+                    default:
+                        break;
+                    }
+                    game_state = BATTER_BALL_THROWN;
+                }            
+            }
+            break;     
+        case BATTER_RUNNING:
+            if (ir_uart_read_ready_p()) {
+                if (ir_uart_getc() == 'F') {
+                    batter.pos.x = CNTR_COL;
+                    game_state = BATTER_IDLE;
+                }           
+            }
+            break;
     }
 }
 
@@ -460,6 +385,7 @@ void draw_hard()
 
     switch (game_state) {
         case GAME_LAUNCHED:
+            //TODO
             break;
         case PITCHER_CHOOSE:
             tinygl_draw_point(pitcher, 1);
@@ -470,9 +396,7 @@ void draw_hard()
                 power_bar_right_point.y = LEDMAT_ROWS_NUM - 1 - i;
                 tinygl_draw_line(power_bar_left_point, power_bar_right_point, 1);            
             }
-            break;    
-        case PITCHER_BALL_THROWN:
-            break;    
+            break;
         case PITCHER_FIELDING:
             tinygl_draw_point(fielder, 1);
             break;
@@ -486,7 +410,8 @@ void draw_hard()
         case BATTER_RUNNING:
             tinygl_draw_point(runner.pos, 1);
             break;
-        default:
+        case GAME_END:
+            //TODO
             break;
     }
 }
@@ -494,28 +419,14 @@ void draw_hard()
 void draw_light()
 {   
     switch (game_state) {
-        case GAME_LAUNCHED:
-            break;
-        case PITCHER_CHOOSE:
-            break;
-        case PITCHER_TIMING:
-            break;    
-        case PITCHER_BALL_THROWN:
-            break;    
         case PITCHER_FIELDING:        
             tinygl_draw_point(landed_ball, 1);
             break;
-        case BATTER_IDLE:
-            break;    
-        case BATTER_BALL_THROWN:
-            break;        
         case BATTER_RUNNING:
             tinygl_draw_point(FIRST_BASE, 1);
             tinygl_draw_point(SECOND_BASE, 1);
             tinygl_draw_point(THIRD_BASE, 1);
             tinygl_draw_point(HOME_BASE, 1);
-            break;
-        default:
             break;
     }
 }
