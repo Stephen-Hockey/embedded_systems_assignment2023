@@ -16,7 +16,7 @@
 #define PACER_RATE 200
 #define NAVSWITCH_CHECK_RATE 200
 #define DRAW_RATE 200
-#define POWER_BAR_UPDATE_RATE 10
+#define POWER_BAR_UPDATE_RATE 2
 #define IR_CHECK_RATE 200
 
 typedef enum {
@@ -152,6 +152,7 @@ void navswitch_west_pushed()
 
 void navswitch_push_pushed()
 {
+    uint8_t ball_packet; 
     switch (game_state) {
     case GAME_LAUNCHED:
         break;
@@ -164,7 +165,8 @@ void navswitch_push_pushed()
     case PITCHER_TIMING:        
         chosen_pitch_power = power_bar.power;
         // game_state = PITCHER_BALL_THROWN;
-        ir_uart_putc(chosen_pitch_col);
+        ball_packet = (chosen_pitch_col << 3) | chosen_pitch_power;
+        ir_uart_putc(ball_packet);
 
         break;    
     case PITCHER_BALL_THROWN:
@@ -197,10 +199,13 @@ void check_navswitch() {
     
 }
 
+bool ball_packet_valid_p(uint8_t ball_packet) {
+    return !(ball_packet > 38 || ball_packet == 7 || ball_packet == 15 || ball_packet == 23 || ball_packet == 31);
+}
 
 void check_ir()
 {
-    uint8_t ballPacket;
+    uint8_t ball_packet;
     switch (game_state) {
     case GAME_LAUNCHED:
         break;
@@ -213,10 +218,13 @@ void check_ir()
     case BATTER_IDLE:
 
         if (ir_uart_read_ready_p()) {
-            ballPacket = ir_uart_getc();
-            chosen_pitch_col = ballPacket;
-            game_state = GAME_LAUNCHED;
+            ball_packet = ir_uart_getc();
+            if (ball_packet_valid_p) {
+                chosen_pitch_col = ball_packet >> 3;
+                chosen_pitch_power = ball_packet & 0b111;
+            }            
         }
+
         break;    
     case BATTER_BALL_THROWN:
         break;        
@@ -247,7 +255,6 @@ void draw_all()
 
     switch (game_state) {
     case GAME_LAUNCHED:
-        display_pixel_set(chosen_pitch_col, 0, 1);
         break;
     case PITCHER_CHOOSE:
         tinygl_draw_point(pitcher_point, 1);  
@@ -262,7 +269,8 @@ void draw_all()
     case PITCHER_BALL_THROWN:
         break;    
     case BATTER_IDLE:
-        tinygl_draw_line(batter_left_point, batter_right_point, 1);
+        // tinygl_draw_line(batter_left_point, batter_right_point, 1);
+        display_pixel_set(chosen_pitch_col, chosen_pitch_power, 1);
         break;    
     case BATTER_BALL_THROWN:
         break;        
