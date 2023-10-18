@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "system.h"
 #include "pio.h"
 #include "timer.h"
@@ -15,8 +16,9 @@
 
 #define PACER_RATE 200
 #define NAVSWITCH_CHECK_RATE 200
-#define DRAW_RATE 200
-#define POWER_BAR_UPDATE_RATE 5
+#define DRAW_HARD_RATE 200
+#define DRAW_LIGHT_RATE 50
+#define POWER_BAR_UPDATE_RATE 10
 #define IR_CHECK_RATE 200
 
 
@@ -25,8 +27,10 @@ typedef enum {
     PITCHER_CHOOSE,         /* Pitcher is choosing what lane to throw the ball down */
     PITCHER_TIMING,         /* Pitcher is timing the power of his shot */
     PITCHER_BALL_THROWN,    /* Pitcher has thrown the ball and is waiting for batter's response */
+    PITCHER_FIELDING,       
     BATTER_IDLE,            /* Batter is waiting for the ball to be thrown */
-    BATTER_BALL_THROWN      /* Ball comes towards batter for them to swing at */
+    BATTER_BALL_THROWN,     /* Ball comes towards batter for them to swing at */
+    BATTER_RUNNING
     // TODO what happens after ball is hit/missed
 } game_state_t;
 
@@ -58,6 +62,15 @@ typedef struct {
     uint8_t tick_rate;
 } thrown_ball_t;
 
+typedef struct {
+    uint8_t col;
+    uint8_t row;
+} fielder_t;
+
+typedef struct {
+    uint8_t col;
+    uint8_t row;
+} landed_ball_t;
 
 static game_state_t game_state = GAME_LAUNCHED; // Should be set to GAME_LAUNCHED initally
 
@@ -65,10 +78,10 @@ static pitcher_t pitcher = {.col = 2, .row = 3};
 static power_bar_t power_bar = {.power = 0, .increment_value = 1};
 static batter_t batter = {.col = 2, .row = 6};
 static thrown_ball_t thrown_ball;
+static fielder_t fielder;
+static landed_ball_t landed_ball;
 static uint16_t homeruns;
 static uint8_t strikes;
-
-
 
 // IR values
 static uint8_t chosen_pitch_col;
@@ -92,15 +105,16 @@ void navswitch_north_pushed()
         break;    
     case PITCHER_BALL_THROWN:
         break;    
+    case PITCHER_FIELDING:
+        break;
     case BATTER_IDLE:
         break;    
     case BATTER_BALL_THROWN:
         // the swing
         if (ball_hit_p()) {
             homeruns++;
-            led_set(LED1, 1);
-        } else {
-            strikes++;
+            game_state = BATTER_RUNNING;
+            ir_uart_putc('O');
         }
         break;        
     default:
@@ -119,10 +133,14 @@ void navswitch_south_pushed()
         break;    
     case PITCHER_BALL_THROWN:
         break;    
+    case PITCHER_FIELDING:
+        break;
     case BATTER_IDLE:
         break;    
     case BATTER_BALL_THROWN:
         break;        
+    case BATTER_RUNNING:
+        break;
     default:
         break;
     }
@@ -139,9 +157,10 @@ void navswitch_east_pushed()
         break;    
     case PITCHER_TIMING:
         break;    
-    case PITCHER_BALL_THROWN:
-    
+    case PITCHER_BALL_THROWN:    
         break;    
+    case PITCHER_FIELDING:
+        break;
     case BATTER_IDLE:
         if (batter.col < LEDMAT_COLS_NUM - 2)
             batter.col++;
@@ -149,7 +168,9 @@ void navswitch_east_pushed()
     case BATTER_BALL_THROWN:
         if (batter.col < LEDMAT_COLS_NUM - 2)
             batter.col++;
-        break;        
+        break;   
+    case BATTER_RUNNING:
+        break;     
     default:
         break;
     }
@@ -167,8 +188,9 @@ void navswitch_west_pushed()
     case PITCHER_TIMING:
         break;    
     case PITCHER_BALL_THROWN:
-        
         break;    
+    case PITCHER_FIELDING:
+        break;
     case BATTER_IDLE:
         if (batter.col > 0)
             batter.col--;
@@ -177,6 +199,8 @@ void navswitch_west_pushed()
         if (batter.col > 0)
             batter.col--;
         break;        
+    case BATTER_RUNNING:
+        break;
     default:
         break;
     }
@@ -198,17 +222,20 @@ void navswitch_push_pushed()
         break;    
     case PITCHER_TIMING:        
         chosen_pitch_power = power_bar.power;
-        // game_state = PITCHER_BALL_THROWN;
         ball_packet = (chosen_pitch_col << 3) | chosen_pitch_power;
         ir_uart_putc(ball_packet);
-
+        game_state = PITCHER_BALL_THROWN;
         break;    
     case PITCHER_BALL_THROWN:
         break;    
+    case PITCHER_FIELDING:
+        break;
     case BATTER_IDLE:
         break;    
     case BATTER_BALL_THROWN:
         break;        
+    case BATTER_RUNNING:
+        break;
     default:
         break;
     }
@@ -240,6 +267,9 @@ bool ball_packet_valid_p(uint8_t ball_packet) {
 void check_ir()
 {
     uint8_t ball_packet;
+    uint8_t hit_packet;
+    uint8_t random_corner;
+
     switch (game_state) {
     case GAME_LAUNCHED:
         if (ir_uart_read_ready_p()) {
@@ -253,7 +283,26 @@ void check_ir()
     case PITCHER_TIMING:
         break;    
     case PITCHER_BALL_THROWN:
+        if (ir_uart_read_ready_p()) {
+            hit_packet = ir_uart_getc();
+            if (hit_packet == 'X') {
+                pitcher.col = 2;
+                game_state = PITCHER_CHOOSE;
+            } else if (hit_packet == 'O') {
+                random_corner = rand() % 4;
+
+                // fancy code because I didn't want to use another switch-case
+                fielder.col = (LEDMAT_COLS_NUM - 1) * (random_corner >> 1);
+                fielder.row = (LEDMAT_ROWS_NUM - 1) * (random_corner & 1);
+                landed_ball.col = (LEDMAT_COLS_NUM - 1) * !(random_corner >> 1);
+                landed_ball.row = (LEDMAT_ROWS_NUM - 1) * !(random_corner & 1);     
+
+                game_state = PITCHER_FIELDING;
+            }
+        }
         break;    
+    case PITCHER_FIELDING:
+        break;
     case BATTER_IDLE:
         if (ir_uart_read_ready_p()) {
             ball_packet = ir_uart_getc();
@@ -289,6 +338,9 @@ void check_ir()
         break;    
     case BATTER_BALL_THROWN:
         break;        
+    case BATTER_RUNNING:
+    
+        break;
     default:
         break;
     }
@@ -307,15 +359,19 @@ void update_power_bar()
 
 void update_thrown_ball()
 {
-    if (thrown_ball.row < LEDMAT_ROWS_NUM - 1) {
+    if (thrown_ball.row < LEDMAT_ROWS_NUM) { // intentionally goes to 7
         thrown_ball.row++;
     } else {
+        strikes++;
+        ir_uart_putc('X');
+        batter.col = 2;
+        game_state = BATTER_IDLE;
 
     }
         
 }
 
-void draw_all()
+void draw_hard()
 {   
     tinygl_point_t pitcher_point = {pitcher.col, pitcher.row};
     tinygl_point_t power_bar_left_point = {.x = 0};
@@ -323,6 +379,9 @@ void draw_all()
     tinygl_point_t batter_left_point = {batter.col, batter.row};
     tinygl_point_t batter_right_point = {batter.col + 1, batter.row};
     tinygl_point_t thrown_ball_point = {thrown_ball.col, thrown_ball.row};
+    tinygl_point_t fielder_point = {fielder.col, fielder.row};
+    // tinygl_point_t landed_ball_point = {landed_ball.col, landed_ball.row};
+
 
     switch (game_state) {
     case GAME_LAUNCHED:
@@ -339,6 +398,10 @@ void draw_all()
         break;    
     case PITCHER_BALL_THROWN:
         break;    
+    case PITCHER_FIELDING:
+        led_set(LED1, 1);
+        tinygl_draw_point(fielder_point, 1);
+        break;
     case BATTER_IDLE:
         tinygl_draw_line(batter_left_point, batter_right_point, 1);
         break;    
@@ -346,6 +409,39 @@ void draw_all()
         tinygl_draw_point(thrown_ball_point, 1);
         tinygl_draw_line(batter_left_point, batter_right_point, 1);
         break;        
+    case BATTER_RUNNING:
+        led_set(LED1, 1);
+
+        break;
+    default:
+        break;
+    }
+}
+
+void draw_light()
+{   
+    tinygl_point_t landed_ball_point = {landed_ball.col, landed_ball.row};
+
+    switch (game_state) {
+    case GAME_LAUNCHED:
+        break;
+    case PITCHER_CHOOSE:
+        break;
+    case PITCHER_TIMING:
+        break;    
+    case PITCHER_BALL_THROWN:
+        break;    
+    case PITCHER_FIELDING:        
+        tinygl_draw_point(landed_ball_point, 1);
+        break;
+    case BATTER_IDLE:
+        break;    
+    case BATTER_BALL_THROWN:
+        break;        
+    case BATTER_RUNNING:
+        //TODO
+
+        break;
     default:
         break;
     }
@@ -368,7 +464,8 @@ int main (void)
     uint8_t power_bar_update_ticks;
     uint8_t thrown_ball_ticks;
     uint8_t ir_ticks;
-    uint8_t draw_ticks;
+    uint8_t draw_hard_ticks;
+    uint8_t draw_light_ticks;
 
     // Main game loop
     while (1) {
@@ -405,10 +502,16 @@ int main (void)
             ir_ticks = 0;
         }
 
-        draw_ticks++;
-        if (draw_ticks >= PACER_RATE/DRAW_RATE) {
-            draw_all();
-            draw_ticks = 0;
+        draw_hard_ticks++;
+        if (draw_hard_ticks >= PACER_RATE/DRAW_HARD_RATE) {
+            draw_hard();
+            draw_hard_ticks = 0;
+        }
+
+        draw_light_ticks++;
+        if (draw_light_ticks >= PACER_RATE/DRAW_LIGHT_RATE) {
+            draw_light();
+            draw_light_ticks = 0;
         }
         
         tinygl_update ();
