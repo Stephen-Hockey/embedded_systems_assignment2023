@@ -79,7 +79,7 @@ graphics.o: graphics.c graphics.h ../../drivers/avr/system.h ../../utils/tinygl.
 
 
 # Link: create ELF output file from object files.
-game.out: game.o system.o pio.o timer.o pacer.o button.o navswitch.o led.o ledmat.o display.o tinygl.o font.o timer0.o usart1.o prescale.o ir_uart.o baseball_objects.o pitcher.o batter.o ir_handler.o graphics.o
+game.out: game.o system.o pio.o timer.o pacer.o button.o navswitch.o ledmat.o display.o tinygl.o font.o timer0.o usart1.o prescale.o ir_uart.o baseball_objects.o pitcher.o batter.o ir_handler.o graphics.o
 	$(CC) $(CFLAGS) $^ -o $@ -lm
 	$(SIZE) $@
 

@@ -43,7 +43,7 @@ power_bar_t power_bar;
 // Game scores. Winner is decided based on bases_covered
 uint8_t bases_covered;
 uint8_t strikes;
-bool winner;
+bool is_winner;
 
 // The chosen pitch column and power of a given pitch
 uint8_t chosen_pitch_col;
@@ -158,13 +158,17 @@ void navswitch_push_pushed(void)
             pitcher_power_bar_init(&power_bar);
             game_state = PITCHER_TIMING;
             break;    
-        case PITCHER_TIMING:        
+        case PITCHER_TIMING:
             chosen_pitch_power = power_bar.power;
+
+            // Concatenates the chosen_pitch_col with the chosen_pitch_power in binary.
             ball_packet = (chosen_pitch_col << 0x03) | chosen_pitch_power;
+
             ir_uart_putc(ball_packet);
             game_state = PITCHER_BALL_THROWN;
             break;
         case GAME_OVER:
+            // Restart Game
             strikes = 0;
             bases_covered = 0;
             runner.base_num = 0;
@@ -208,6 +212,7 @@ void check_collisions(void)
             }
             break;
         case BATTER_RUNNING:
+            // Check for when the runner touches the bases, but only change runner.base_num if the bases are touched in order
             for (uint8_t base = 0; base < NUM_BASES; base++) {
                 if (point_equals_p(runner.pos, BASES[(base + 1) % NUM_BASES]) && runner.base_num == base) {
                     runner.base_num = (runner.base_num + 1) % NUM_BASES;
@@ -227,7 +232,6 @@ void check_ir(void)
 {
     uint8_t ball_packet;
     uint8_t hit_packet;
-    uint8_t winner_packet;
 
     switch (game_state) {
         case GAME_LAUNCHED:
@@ -240,10 +244,10 @@ void check_ir(void)
         case PITCHER_CHOOSE:
             if (ir_uart_read_ready_p()) {
                 if (bases_covered > ir_uart_getc()) {
-                    winner = 1; // this player is the winner
+                    is_winner = 1;
                     ir_uart_putc(YOU_LOSE);
                 } else {
-                    winner = 0;
+                    is_winner = 0;
                     ir_uart_putc(YOU_WIN);
                 }
                 game_state = GAME_OVER;
@@ -263,12 +267,11 @@ void check_ir(void)
                 } else if (hit_packet == STRIKED_OUT && strikes > 0) {
                     ir_uart_putc(bases_covered);
                 } else if (hit_packet == YOU_LOSE) {
-                    winner = 0;
+                    is_winner = 0;
                     game_state = GAME_OVER;
                 } else if (hit_packet == YOU_WIN) {
-                    winner = 1;
+                    is_winner = 1;
                     game_state = GAME_OVER;
-
                 }
             }
             break;
@@ -276,10 +279,15 @@ void check_ir(void)
             if (ir_uart_read_ready_p()) {
                 ball_packet = ir_uart_getc();
                 if (ball_packet_valid_p(ball_packet)) {
+
+                    // Unpackage 'packet' into the two values it represents
                     chosen_pitch_col = ball_packet >> 0x03;
                     chosen_pitch_power = ball_packet & 0x07;
+
                     pitched_ball.pos.x = LEDMAT_COLS_NUM - 1 - chosen_pitch_col;
                     pitched_ball.pos.y = 0;
+
+                    // using a switch here to manually set the numbers allows for skill to be better rewarded
                     switch (chosen_pitch_power)
                     {
                     case 0:
@@ -313,15 +321,6 @@ void check_ir(void)
                 }           
             }
             break;
-        case GAME_OVER:
-            if (ir_uart_read_ready_p()) {
-                winner_packet = ir_uart_getc();
-                if (winner_packet == YOU_LOSE) {
-                    winner = 0;
-                } else if (winner_packet == YOU_WIN) {
-                    winner = 1;
-                }         
-            }
         default:
             break;
     }
@@ -332,6 +331,7 @@ void check_ir(void)
 */
 void draw_hard(void)
 {   
+    // Not allowed in case blocks
     tinygl_point_t power_bar_left_point = {.x = 0, .y = LEDMAT_ROWS_NUM - 1};
     tinygl_point_t power_bar_right_point = {.x = LEDMAT_COLS_NUM - 1, .y = LEDMAT_ROWS_NUM - 1};
     tinygl_point_t batter_right_point = {.x = batter.pos.x + batter.extra_width, .y = batter.pos.y};
@@ -361,7 +361,7 @@ void draw_hard(void)
             tinygl_draw_point(runner.pos, 1);
             break;
         case GAME_OVER:
-            if (winner) {
+            if (is_winner) {
                 draw_bitmap(BITMAP_HAPPY);
             } else {
                 draw_bitmap(BITMAP_SAD);
@@ -379,10 +379,11 @@ void draw_hard(void)
 void draw_light(void)
 {   
     switch (game_state) {
-        case PITCHER_FIELDING:        
+        case PITCHER_FIELDING:
             tinygl_draw_point(hit_ball, 1);
             break;
         case BATTER_RUNNING:
+            // Display all four bases
             for (uint8_t base = 0; base < NUM_BASES; base++)
                 tinygl_draw_point(BASES[base], 1);
             break;
